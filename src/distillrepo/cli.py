@@ -120,7 +120,7 @@ def main() -> int:
     raw_project_name = pyproject.get("project", {}).get("name") or project_input.name
     normalized_project_name = str(raw_project_name).replace("-", "_")
     script_target = _infer_script_target(pyproject, normalized_project_name)
-    package_root = _infer_package_root(project_input, pyproject, script_target)
+    package_root = _infer_package_root(project_input, project_root, pyproject, script_target)
     package_name = package_root.name
     analysis_kind = "application" if script_target is not None else "library"
     entry_point_module = args.entry_point_module or _infer_entry_point_module(
@@ -177,32 +177,47 @@ def _load_pyproject(project_root: Path) -> dict:
     return tomllib.loads((project_root / "pyproject.toml").read_text(encoding="utf-8"))
 
 
-def _infer_package_root(project_input: Path, pyproject: dict, script_target: str | None) -> Path:
+def _infer_package_root(project_input: Path, project_root: Path | None, pyproject: dict, script_target: str | None) -> Path:
+    search_root = project_root or project_input
     if (project_input / "__init__.py").is_file():
         return project_input
 
     if script_target:
         module_name, _, _ = script_target.partition(":")
-        match = _find_module_file(project_input, module_name)
+        match = _find_module_file(search_root, module_name)
         if match is not None:
             return _package_root_from_module_file(match, module_name)
+
+    for candidate in _hatch_package_candidates(search_root, pyproject):
+        if (candidate / "__init__.py").is_file():
+            return candidate
 
     candidates: list[Path] = []
     project_name = pyproject.get("project", {}).get("name")
     if isinstance(project_name, str):
         normalized = project_name.replace("-", "_")
-        candidates.append(project_input / normalized)
-    candidates.append(project_input / project_input.name.replace("-", "_"))
+        candidates.append(search_root / normalized)
+        candidates.append(search_root / "src" / normalized)
+    candidates.append(search_root / project_input.name.replace("-", "_"))
+    candidates.append(search_root / "src" / project_input.name.replace("-", "_"))
 
     for candidate in candidates:
         if (candidate / "__init__.py").is_file():
             return candidate
 
     package_children = sorted(
-        child for child in project_input.iterdir() if child.is_dir() and (child / "__init__.py").is_file()
+        child for child in search_root.iterdir() if child.is_dir() and (child / "__init__.py").is_file()
     )
     if len(package_children) == 1:
         return package_children[0]
+
+    src_root = search_root / "src"
+    if src_root.is_dir():
+        src_children = sorted(
+            child for child in src_root.iterdir() if child.is_dir() and (child / "__init__.py").is_file()
+        )
+        if len(src_children) == 1:
+            return src_children[0]
 
     return project_input
 
@@ -297,6 +312,22 @@ def _find_module_file(project_root: Path, module_name: str) -> Path | None:
     if len(matches) == 1:
         return matches[0]
     return None
+
+
+def _hatch_package_candidates(project_root: Path, pyproject: dict) -> list[Path]:
+    tool = pyproject.get("tool", {})
+    hatch = tool.get("hatch", {}) if isinstance(tool, dict) else {}
+    build = hatch.get("build", {}) if isinstance(hatch, dict) else {}
+    targets = build.get("targets", {}) if isinstance(build, dict) else {}
+    wheel = targets.get("wheel", {}) if isinstance(targets, dict) else {}
+    packages = wheel.get("packages") if isinstance(wheel, dict) else None
+    if not isinstance(packages, list):
+        return []
+    candidates: list[Path] = []
+    for package in packages:
+        if isinstance(package, str):
+            candidates.append((project_root / package).resolve())
+    return candidates
 
 
 def _package_root_from_module_file(module_file: Path, module_name: str) -> Path:
