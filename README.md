@@ -8,6 +8,8 @@ Default outputs:
 
 Project page: https://github.com/raamana/distillrepo
 
+This software was developed with the help of Codex model GPT 5.4.
+
 Install:
 
 ```bash
@@ -257,4 +259,3 @@ The reported token counts are estimates based on text length. They are useful fo
 There is not yet a universal compression threshold that guarantees trustworthy review quality across repos. Treat compression as an observed outcome, not the main objective. The main objective is retaining enough review-relevant structure and source to support a useful LLM review.
 
 ## Example Results
-
