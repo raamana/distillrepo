@@ -86,7 +86,13 @@ def _mode_for_rank(index: int, file_info: FileInfo, config: Config) -> str:
             return "signature"
         return "full" if file_info.depth_from_entry <= 1 else "summary"
     if config.review_mode == "budgeted":
-        return "summary" if index < 4 else "signature"
+        if file_info.depth_from_entry < 0:
+            return "excluded"
+        if index < 2:
+            return "summary"
+        if index < 6:
+            return "signature"
+        return "excluded"
     return "full"
 
 
