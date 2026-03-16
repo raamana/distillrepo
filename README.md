@@ -6,22 +6,6 @@ Default outputs:
 - `distilled.<package>.<MMMDDYYYY>.py`: a single-file bundle for LLM review
 - `<package_root>/.distillrepo/`: a structured Intermediate Representation (IR) for agents and downstream tooling
 
-Project page: https://github.com/raamana/distillrepo
-
-This software was developed with the help of Codex model GPT 5.4.
-
-Install:
-
-```bash
-pip install distillrepo
-```
-
-Run:
-
-```bash
-distillrepo path/to/package
-```
-
 ## Why use distillrepo
 
 Large repos are awkward to review with an LLM if you only have two bad options:
@@ -56,6 +40,23 @@ Good demo for an agent-native audience: handoffs, tools, tracing, memory, model 
 - `96` modules reached from the inferred root set
 
 Why it is useful: the LLM bundle keeps the core agent runtime and API surface reviewable in one file, while `.distillrepo/` gives agents a reusable symbol and relationship map for follow-up inspection.
+
+Output tree in `.distillrepo`:
+```bash
+>>  tree
+.
+├── chunks.json
+├── entrypoints.json
+├── hotspots.json
+├── manifest.json
+├── modules.json
+├── relationships.json
+├── repo_summary.md
+├── symbols.json
+└── unused_candidates.json
+
+1 directory, 9 files
+```
 
 ### `networkx`
 
@@ -309,4 +310,8 @@ The reported token counts are estimates based on text length. They are useful fo
 
 There is not yet a universal compression threshold that guarantees trustworthy review quality across repos. Treat compression as an observed outcome, not the main objective. The main objective is retaining enough review-relevant structure and source to support a useful LLM review.
 
-## Example Results
+
+## Use of AI
+
+This software was developed with the help of Codex model GPT 5.4.
+
