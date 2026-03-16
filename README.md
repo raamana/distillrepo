@@ -33,6 +33,57 @@ Large repos are awkward to review with an LLM if you only have two bad options:
 - compresses lower-priority areas into summaries or signatures
 - keeps a structured IR for retrieval, ranking, and follow-up analysis
 
+## Example Demo Outputs
+
+These are real runs on open-source repositories. They show the kind of compression `distillrepo` can achieve, but they should be interpreted together with root coverage and review quality, not as standalone scoreboards.
+
+| Repo | Shape | Review mode | Files | Symbols | Distilled size | Saved | Compression |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `openai-agents-python` | Agent SDK | `review` | 163 | 1701 | 100,082 | 79.2% | 4.8x |
+| `networkx` | Large API library | `review` | 288 | 1973 | 62,074 | 93.8% | 16.3x |
+| `networkx` | Large API library | `budgeted` | 288 | 1973 | 41,872 | 95.8% | 24.1x |
+| `rich` | Medium utility library | `review` | 100 | 833 | 15,964 | 94.6% | 18.5x |
+
+Please note that `distillrepo` uses heuristics for root inference, reachability, hotspot ranking, and unused-code detection. Those are useful review aids, but they are not ground truth.
+
+### `openai-agents-python`
+
+Good demo for an agent-native audience: handoffs, tools, tracing, memory, model adapters, and runtime orchestration all live in one package.
+
+- `163` files, `1701` symbols, `163` modules
+- `482,255` estimated original tokens -> `100,082` distilled tokens
+- `79.2%` saved, `4.8x` compression
+- `96` modules reached from the inferred root set
+
+Why it is useful: the LLM bundle keeps the core agent runtime and API surface reviewable in one file, while `.distillrepo/` gives agents a reusable symbol and relationship map for follow-up inspection.
+
+### `networkx`
+
+Good demo for large API-heavy libraries: many modules, broad public surface, and enough internal structure that selective compression matters.
+
+`review` mode:
+- `288` files, `1973` symbols, `288` modules
+- `1,008,946` estimated original tokens -> `62,074` distilled tokens
+- `93.8%` saved, `16.3x` compression
+- `222` modules reached from the inferred root set
+
+`budgeted` mode:
+- `1,008,946` estimated original tokens -> `41,872` distilled tokens
+- `95.8%` saved, `24.1x` compression
+
+Why it is useful: `review` preserves more structural and code detail for general inspection; `budgeted` shows how much further the bundle can shrink when you mainly want a compact triage artifact.
+
+### `rich`
+
+Good demo for a medium-sized, recognizable library with many modules and a clear internal architecture.
+
+- `100` files, `833` symbols, `100` modules
+- `295,361` estimated original tokens -> `15,964` distilled tokens
+- `94.6%` saved, `18.5x` compression
+- `66` modules reached from the inferred root set
+
+Why it is useful: the repo is large enough to make manual copy-paste review awkward, but still small enough that the bundle and IR outputs are intuitive to inspect.
+
 ## Installation
 
 ```bash
