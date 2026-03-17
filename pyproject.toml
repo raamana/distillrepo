@@ -36,6 +36,9 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 urls = { Homepage = "https://github.com/raamana/distillrepo", Repository = "https://github.com/raamana/distillrepo" }
+dependencies = [
+  "tomli; python_version < \"3.11\"",
+]
 
 [project.optional-dependencies]
 analysis = ["jedi", "radon", "vulture"]

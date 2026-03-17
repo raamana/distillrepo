@@ -11,9 +11,14 @@ from __future__ import annotations
 
 import argparse
 import ast
-import tomllib
+import sys
 import warnings
 from pathlib import Path
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib  # type: ignore[no-redef]
 
 from . import __version__
 from .api import write_outputs
@@ -108,7 +113,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     warnings.filterwarnings("ignore", message=r"Tried to save a file to .*", module=r"parso\.cache")
     parser = build_parser()
-    import sys
 
     if len(sys.argv) == 1:
         parser.print_help()
