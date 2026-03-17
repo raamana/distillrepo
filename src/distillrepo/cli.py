@@ -100,7 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--exclude-unreachable",
         action="store_true",
-        help="Exclude modules not reached from the inferred root set from the LLM bundle.",
+        help="Force exclusion of modules not reached from the inferred root set, including in full and concat-style modes.",
     )
     parser.add_argument(
         "--version",
@@ -155,7 +155,9 @@ def main() -> int:
         max_chars=args.max_chars,
         max_lines=args.max_lines,
         max_files=args.max_files,
-        include_unreachable=not args.exclude_unreachable,
+        include_unreachable=(
+            False if args.exclude_unreachable else args.review_mode in {"full", "concat", "plain_concat"}
+        ),
         analysis_kind=analysis_kind,
     )
     outputs = write_outputs(config)
