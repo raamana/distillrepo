@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 
-from .models import FileInfo
+from .models import FileInfo, FunctionInfo
 
 
 def build_import_graph(files: dict[str, FileInfo]) -> dict[str, list[str]]:
@@ -166,31 +166,44 @@ def render_call_graph(files: dict[str, FileInfo], entry_module: str, entry_funct
 
     lines: list[str] = []
 
-    def walk(module_path: str, qualified_name: str, depth: int, path: set[tuple[str, str]]) -> None:
-        prefix = "  " * depth
+    def walk(
+        module_path: str,
+        qualified_name: str,
+        depth: int,
+        path_set: set[tuple[str, str]],
+        chain: list[str],
+    ) -> None:
         marker = f"{module_path}:{qualified_name}"
-        if (module_path, qualified_name) in path:
-            lines.append(f"{prefix}- {marker} (cycle)")
+        chain_text = " -> ".join([*chain, marker])
+        if (module_path, qualified_name) in path_set:
+            lines.append(f"- {chain_text} (cycle)")
             return
-        lines.append(f"{prefix}- {marker}")
+        lines.append(f"- {chain_text}")
         if depth >= max_depth:
             return
         function = files[module_path].functions.get(qualified_name)
         if function is None:
             return
-        next_path = set(path)
-        next_path.add((module_path, qualified_name))
+        next_path_set = set(path_set)
+        next_path_set.add((module_path, qualified_name))
+        next_chain = [*chain, marker]
         for resolved in function.resolved_calls:
             if resolved.target_module_path and resolved.target_module_path in files and resolved.target_qualified_name:
-                walk(resolved.target_module_path, resolved.target_qualified_name, depth + 1, next_path)
+                walk(
+                    resolved.target_module_path,
+                    resolved.target_qualified_name,
+                    depth + 1,
+                    next_path_set,
+                    next_chain,
+                )
             else:
-                lines.append(f"{'  ' * (depth + 1)}- {resolved.source_raw_name} ({resolved.resolution_kind})")
+                lines.append(f"- {' -> '.join([*next_chain, f'{resolved.source_raw_name} ({resolved.resolution_kind})'])}")
 
-    walk(entry.module_path, entry.qualified_name, 0, set())
+    walk(entry.module_path, entry.qualified_name, 0, set(), [])
     return lines
 
 
-def _locate_entry_function(file_info: FileInfo, entry_function: str):
+def _locate_entry_function(file_info: FileInfo, entry_function: str) -> FunctionInfo | None:
     if entry_function in file_info.functions:
         return file_info.functions[entry_function]
     matches = [function for function in file_info.functions.values() if function.name == entry_function]

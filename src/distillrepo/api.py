@@ -8,7 +8,7 @@ from .discovery import discover_python_files
 from .enrich import apply_radon_metrics, detect_unused_candidates
 from .graphs import build_import_graph, compute_reachability, detect_cycles, order_modules, render_call_graph, render_import_forest, render_import_tree
 from .ir import write_ir_bundle
-from .models import AnalysisResult, Config
+from .models import AnalysisResult, Config, FileInfo
 from .ranking import assign_inclusion_modes, collect_hotspots, generate_observations, score_files
 from .render import render_bundle
 from .resolution import resolve_calls
@@ -123,7 +123,7 @@ def write_outputs(config: Config) -> dict[str, object]:
     }
 
 
-def derive_root_modules(files, config: Config, entry_module: str) -> list[str]:
+def derive_root_modules(files: dict[str, FileInfo], config: Config, entry_module: str) -> list[str]:
     """Choose a small root set for pooled review analysis.
 
     The policy is intentionally conservative: enough roots to cover likely
@@ -160,7 +160,7 @@ def derive_root_modules(files, config: Config, entry_module: str) -> list[str]:
     return ordered_roots[:8 if config.analysis_kind == "library" else 4]
 
 
-def classify_root_modules(files, config: Config, entry_module: str, root_modules: list[str]) -> dict[str, str]:
+def classify_root_modules(files: dict[str, FileInfo], config: Config, entry_module: str, root_modules: list[str]) -> dict[str, str]:
     """Label inferred roots so users can inspect why each root was included."""
     root_kinds: dict[str, str] = {}
     package_root_module = config.package_name
