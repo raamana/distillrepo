@@ -6,14 +6,32 @@ from .models import Config, FileInfo, ResolvedCall
 def resolve_calls(files: dict[str, FileInfo], config: Config) -> list[str]:
     warnings: list[str] = []
     jedi = _load_jedi(config)
+    project = None
+    script_by_path: dict[str, object] = {}
+    if jedi is not None:
+        try:
+            project = jedi.Project(path=str(config.package_root.parent))
+        except Exception:
+            project = None
     for file_info in files.values():
+        script = None
+        if jedi is not None and project is not None:
+            cache_key = str(file_info.path)
+            script = script_by_path.get(cache_key)
+            if script is None:
+                try:
+                    script = jedi.Script(code=file_info.source, path=cache_key, project=project)
+                except Exception:
+                    script = None
+                if script is not None:
+                    script_by_path[cache_key] = script
         for function in file_info.functions.values():
             resolved: list[ResolvedCall] = []
             seen: set[tuple[str | None, str | None, str]] = set()
             for call_site in function.call_sites:
                 result = None
-                if jedi is not None:
-                    result = _resolve_with_jedi(jedi, file_info, call_site.lineno, call_site.col_offset, config)
+                if script is not None:
+                    result = _resolve_with_jedi(script, call_site.lineno, call_site.col_offset, config)
                 if result is None:
                     result = _resolve_heuristic(files, file_info, function.class_name, call_site.raw_name)
                 key = (result.target_module_path, result.target_qualified_name, result.resolution_kind)
@@ -37,11 +55,12 @@ def _load_jedi(config: Config):
     return jedi
 
 
-def _resolve_with_jedi(jedi, file_info: FileInfo, lineno: int, col_offset: int, config: Config) -> ResolvedCall | None:
+def _resolve_with_jedi(script: object, lineno: int, col_offset: int, config: Config) -> ResolvedCall | None:
     try:
-        project = jedi.Project(path=str(config.package_root.parent))
-        script = jedi.Script(code=file_info.source, path=str(file_info.path), project=project)
-        names = script.goto(line=lineno, column=col_offset, follow_imports=True)
+        goto = getattr(script, "goto", None)
+        if goto is None:
+            return None
+        names = goto(line=lineno, column=col_offset, follow_imports=True)
     except Exception:
         return None
     for name in names:

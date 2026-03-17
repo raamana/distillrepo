@@ -199,6 +199,7 @@ def _modules_payload(result: AnalysisResult) -> list[dict]:
 
 def _symbols_payload(result: AnalysisResult) -> list[dict]:
     unused_ids = {candidate.symbol_id for candidate in result.unused_candidates if candidate.symbol_id}
+    called_by_index = _build_called_by_index(result)
     payload: list[dict] = []
     for module_path in result.ordered_modules:
         file_info = result.files[module_path]
@@ -221,7 +222,7 @@ def _symbols_payload(result: AnalysisResult) -> list[dict]:
                         for resolved in function.resolved_calls
                         if resolved.target_module_path and resolved.target_qualified_name
                     ],
-                    "called_by": _called_by(result, function),
+                    "called_by": sorted(called_by_index.get(symbol_id, [])),
                 }
             )
     return payload
@@ -361,17 +362,21 @@ def _function_tags(function: FunctionInfo, result: AnalysisResult, possibly_unus
     return tags
 
 
-def _called_by(result: AnalysisResult, target: FunctionInfo) -> list[str]:
-    target_ref = _symbol_id(target)
-    callers: list[str] = []
+def _build_called_by_index(result: AnalysisResult) -> dict[str, list[str]]:
+    """Build reverse call index for IR payloads.
+
+    This avoids an O(symbols^2) scan when populating `called_by`.
+    """
+    index: dict[str, list[str]] = {}
     for file_info in result.files.values():
         for function in file_info.functions.values():
+            caller_id = _symbol_id(function)
             for resolved in function.resolved_calls:
-                if resolved.target_module_path and resolved.target_qualified_name:
-                    if _resolved_symbol_ref(resolved.target_module_path, resolved.target_qualified_name) == target_ref:
-                        callers.append(_symbol_id(function))
-                        break
-    return sorted(callers)
+                if not (resolved.target_module_path and resolved.target_qualified_name):
+                    continue
+                target_id = _resolved_symbol_ref(resolved.target_module_path, resolved.target_qualified_name)
+                index.setdefault(target_id, []).append(caller_id)
+    return index
 
 
 def _resolved_symbol_ref(module_path: str, qualified_name: str) -> str:
