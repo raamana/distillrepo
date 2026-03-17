@@ -11,8 +11,9 @@ def resolve_calls(files: dict[str, FileInfo], config: Config) -> list[str]:
     if jedi is not None:
         try:
             project = jedi.Project(path=str(config.package_root.parent))
-        except Exception:
+        except Exception as exc:
             project = None
+            warnings.append(f"Jedi project initialization failed; using heuristic call resolution only ({exc.__class__.__name__}).")
     for file_info in files.values():
         script = None
         if jedi is not None and project is not None:

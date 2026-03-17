@@ -367,7 +367,7 @@ def _build_called_by_index(result: AnalysisResult) -> dict[str, list[str]]:
 
     This avoids an O(symbols^2) scan when populating `called_by`.
     """
-    index: dict[str, list[str]] = {}
+    index: dict[str, set[str]] = {}
     for file_info in result.files.values():
         for function in file_info.functions.values():
             caller_id = _symbol_id(function)
@@ -375,8 +375,8 @@ def _build_called_by_index(result: AnalysisResult) -> dict[str, list[str]]:
                 if not (resolved.target_module_path and resolved.target_qualified_name):
                     continue
                 target_id = _resolved_symbol_ref(resolved.target_module_path, resolved.target_qualified_name)
-                index.setdefault(target_id, []).append(caller_id)
-    return index
+                index.setdefault(target_id, set()).add(caller_id)
+    return {target_id: sorted(callers) for target_id, callers in index.items()}
 
 
 def _resolved_symbol_ref(module_path: str, qualified_name: str) -> str:
