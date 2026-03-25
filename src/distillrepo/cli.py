@@ -30,7 +30,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="distillrepo",
         description=(
             "Distill a repository into a compact LLM review bundle and a "
-            "structured .distillrepo Intermediate Representation (IR)."
+            "structured .distillrepo Intermediate Representation (IR). "
+            "When package_root is omitted, the current directory is used."
         ),
         epilog=(
             "Trust directly extracted facts more than heuristic judgments. "
@@ -40,7 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
             "--review-mode to override defaults when needed."
         ),
     )
-    parser.add_argument("package_root", type=Path, help="Path to the package root to analyze.")
+    parser.add_argument("package_root", nargs="?", type=Path, help="Path to the package root to analyze.")
     parser.add_argument(
         "--entry-point-module",
         help="Override the inferred entry module path relative to the package root.",
@@ -51,6 +52,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output", type=Path, help="Write the single-file LLM bundle to this path.")
     parser.add_argument("--stdout", action="store_true", help="Also print the generated LLM bundle to stdout.")
+    parser.add_argument(
+        "--no-ir",
+        action="store_true",
+        help="Skip writing the `.distillrepo/` intermediate representation directory.",
+    )
     parser.add_argument(
         "--review-mode",
         default="review",
@@ -113,54 +119,72 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     warnings.filterwarnings("ignore", message=r"Tried to save a file to .*", module=r"parso\.cache")
     parser = build_parser()
-
-    if len(sys.argv) == 1:
-        parser.print_help()
-        return 0
+    no_arg_invocation = len(sys.argv) == 1
     args = parser.parse_args()
-    project_input = args.package_root.resolve()
-    project_root = _find_project_root(project_input)
-    pyproject = _load_pyproject(project_root) if project_root is not None else {}
-    raw_project_name = pyproject.get("project", {}).get("name") or project_input.name
-    normalized_project_name = str(raw_project_name).replace("-", "_")
-    script_target = _infer_script_target(pyproject, normalized_project_name)
-    package_root = _infer_package_root(project_input, project_root, pyproject, script_target)
-    package_name = package_root.name
-    analysis_kind = "application" if script_target is not None else "library"
-    entry_point_module = args.entry_point_module or _infer_entry_point_module(
-        package_root, package_name, pyproject, script_target, analysis_kind
-    )
-    entry_point_function = args.entry_point_function or _infer_entry_point_function(
-        package_root / entry_point_module, script_target, analysis_kind
-    )
 
-    default_excludes = Config.__dataclass_fields__["exclude_dirs"].default_factory()
-    config = Config(
-        package_root=package_root,
-        package_name=package_name,
-        entry_point_module=entry_point_module,
-        entry_point_function=entry_point_function,
-        output_path=args.output.resolve() if args.output else None,
-        review_mode=args.review_mode,
-        call_graph_depth=args.call_graph_depth,
-        complexity_hotspot_threshold=args.complexity_threshold,
-        use_jedi=not args.no_jedi,
-        use_radon=not args.no_radon,
-        use_vulture=not args.no_vulture,
-        exclude_dirs=default_excludes | set(args.exclude_dir),
-        exclude_globs=list(args.exclude_glob),
-        exclude_regexes=list(args.exclude_regex),
-        include_tests=args.include_tests,
-        max_tokens=args.max_tokens,
-        max_chars=args.max_chars,
-        max_lines=args.max_lines,
-        max_files=args.max_files,
-        include_unreachable=(
-            False if args.exclude_unreachable else args.review_mode in {"full", "concat", "plain_concat"}
-        ),
-        analysis_kind=analysis_kind,
-    )
-    outputs = write_outputs(config)
+    if args.package_root is None:
+        args.package_root = Path(".")
+
+    if no_arg_invocation:
+        args.review_mode = "full"
+        args.no_ir = True
+
+    try:
+        project_input = args.package_root.resolve()
+        invocation_cwd = Path.cwd().resolve()
+        project_root = _find_project_root(project_input)
+        pyproject = _load_pyproject(project_root) if project_root is not None else {}
+        raw_project_name = pyproject.get("project", {}).get("name") or project_input.name
+        normalized_project_name = str(raw_project_name).replace("-", "_")
+        script_target = _infer_script_target(pyproject, normalized_project_name)
+        package_root = _infer_package_root(project_input, project_root, pyproject, script_target)
+        package_name = package_root.name
+        analysis_kind = "application" if script_target is not None else "library"
+        entry_point_module = args.entry_point_module or _infer_entry_point_module(
+            package_root, package_name, pyproject, script_target, analysis_kind
+        )
+        entry_point_function = args.entry_point_function or _infer_entry_point_function(
+            package_root / entry_point_module, script_target, analysis_kind
+        )
+
+        if args.output:
+            output_path = args.output.resolve()
+        elif no_arg_invocation:
+            output_path = invocation_cwd / f"distilled.{package_name}.{_date_label()}.py"
+        else:
+            output_path = None
+
+        default_excludes = Config.__dataclass_fields__["exclude_dirs"].default_factory()
+        config = Config(
+            package_root=package_root,
+            package_name=package_name,
+            entry_point_module=entry_point_module,
+            entry_point_function=entry_point_function,
+            output_path=output_path,
+            write_ir=not args.no_ir,
+            review_mode=args.review_mode,
+            call_graph_depth=args.call_graph_depth,
+            complexity_hotspot_threshold=args.complexity_threshold,
+            use_jedi=not args.no_jedi,
+            use_radon=not args.no_radon,
+            use_vulture=not args.no_vulture,
+            exclude_dirs=default_excludes | set(args.exclude_dir),
+            exclude_globs=list(args.exclude_glob),
+            exclude_regexes=list(args.exclude_regex),
+            include_tests=args.include_tests,
+            max_tokens=args.max_tokens,
+            max_chars=args.max_chars,
+            max_lines=args.max_lines,
+            max_files=args.max_files,
+            include_unreachable=(
+                False if args.exclude_unreachable else args.review_mode in {"full", "concat", "plain_concat"}
+            ),
+            analysis_kind=analysis_kind,
+        )
+        outputs = write_outputs(config)
+    except ValueError as exc:
+        parser.exit(2, f"distillrepo: error: {exc}\n")
+
     result = outputs["result"]
     bundle_path = outputs["bundle_path"]
     ir_dir = outputs["ir_dir"]
@@ -344,7 +368,13 @@ def _package_root_from_module_file(module_file: Path, module_name: str) -> Path:
     return current
 
 
-def _print_summary(result, bundle_path: Path, ir_dir: Path) -> None:
+def _date_label() -> str:
+    from datetime import datetime
+
+    return datetime.now().strftime("%b%d%Y")
+
+
+def _print_summary(result, bundle_path: Path, ir_dir: Path | None) -> None:
     original_tokens = result.original_tokens
     bundle_tokens = result.bundle_tokens
     saved_tokens = max(0, original_tokens - bundle_tokens)
@@ -377,7 +407,7 @@ def _print_summary(result, bundle_path: Path, ir_dir: Path) -> None:
         print(f"Compression: {compression:.1f}x")
     print("")
     print(f"LLM bundle: {bundle_path}")
-    print(f"IR: {ir_dir}")
+    print(f"IR: {ir_dir if ir_dir is not None else 'skipped (--no-ir)'}")
 
 
 if __name__ == "__main__":

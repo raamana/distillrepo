@@ -101,10 +101,10 @@ def bundle(config: Config) -> str:
 
 
 def write_outputs(config: Config) -> dict[str, object]:
-    """Write both default outputs: the LLM bundle and the `.distillrepo/` IR.
+    """Write the default bundle and, optionally, the `.distillrepo/` IR.
 
     The single-file bundle is a compressed, review-oriented view.
-    The `.distillrepo/` directory contains the fuller machine-readable
+    When enabled, the `.distillrepo/` directory contains the fuller machine-readable
     representation, including pooled multi-root metadata and other analysis
     artifacts that may be too verbose for direct LLM consumption.
     """
@@ -113,8 +113,8 @@ def write_outputs(config: Config) -> dict[str, object]:
     date_label = datetime.now().strftime("%b%d%Y")
     bundle_path = config.output_path or (config.package_root / f"distilled.{config.package_name}.{date_label}.py")
     bundle_path.write_text(bundle_text, encoding="utf-8")
-    ir_dir = config.package_root / ".distillrepo"
-    artifacts = write_ir_bundle(result, bundle_path, ir_dir)
+    ir_dir = config.package_root / ".distillrepo" if config.write_ir else None
+    artifacts = write_ir_bundle(result, bundle_path, ir_dir) if ir_dir is not None else []
     return {
         "result": result,
         "bundle_path": bundle_path,

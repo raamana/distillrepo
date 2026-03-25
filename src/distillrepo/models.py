@@ -97,6 +97,7 @@ class Config:
     entry_point_module: str
     entry_point_function: str | None
     output_path: Path | None = None
+    write_ir: bool = True
     review_mode: str = "review"
     call_graph_depth: int = 4
     complexity_hotspot_threshold: int = 10
