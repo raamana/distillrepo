@@ -1,10 +1,10 @@
 # distillrepo
 
-`distillrepo` distills Python repositories into compact review bundles for LLMs and structured IR for agents.
+`distillrepo` uses static analysis to distill Python repositories into compact review bundles for LLMs and a structured Intermediate Representation (IR) for agents.
 
-Default outputs:
+Common outputs:
 - `distilled.<package>.<MMMDDYYYY>.py`: a single-file bundle for LLM review
-- `<package_root>/.distillrepo/`: a structured Intermediate Representation (IR) for agents and downstream tooling
+- `<package_root>/.distillrepo/`: a structured Intermediate Representation (IR) for agents and downstream tooling when IR output is enabled
 
 ## Why use distillrepo
 
@@ -99,15 +99,27 @@ pip install "distillrepo[analysis]"
 
 ## Quick Start
 
-Analyze a package directory:
+Run it with no arguments to analyze the current project, write a `full` review bundle into the current working directory, and skip IR output:
+
+```bash
+distillrepo
+```
+
+Analyze a package or project path explicitly:
 
 ```bash
 distillrepo path/to/package
 ```
 
-This writes:
+Explicit path-based runs default to `review` mode and write:
 - `path/to/package/distilled.<package>.<MMMDDYYYY>.py`
 - `path/to/package/.distillrepo/`
+
+Skip IR output explicitly:
+
+```bash
+distillrepo path/to/package --no-ir
+```
 
 Show help:
 
@@ -125,7 +137,7 @@ distillrepo path/to/package --stdout
 
 ### 1. LLM Bundle
 
-The single-file bundle is optimized for copy-paste review in an LLM. Depending on mode, it can include:
+The single-file bundle is optimized for copy-paste review in an LLM. It is derived from static analysis and, depending on mode, can include:
 - repo summary and review guidance
 - inferred roots and top-level structure
 - hotspot and cycle summaries
@@ -158,6 +170,7 @@ Use the IR when you want deterministic machine-readable structure instead of one
 
 For LLM review:
 - start with `distilled.<package>.<date>.py`
+- use `distillrepo` with no arguments when you want a large current-directory bundle quickly
 - use `review` mode first unless you have a specific need
 - if the bundle still feels too large, try `architecture` or `budgeted`
 - if you need nearly raw source, use `concat` or `plain_concat`
@@ -207,6 +220,14 @@ distillrepo path/to/package
 ```
 
 This uses `review` mode, which is the recommended default.
+
+### Fast local bundle from the current repo
+
+```bash
+distillrepo
+```
+
+This uses `full` mode, writes the bundle into the current working directory, and skips IR output.
 
 ### Architecture walkthrough
 
@@ -302,7 +323,7 @@ Heuristics:
 - library-style repos bias toward package and public subpackage roots
 - shared-across-roots modules are ranked higher for review
 
-The `.distillrepo/` IR keeps the fuller pooled analysis. The single-file `distilled.<package>.<date>.py` bundle is the review-oriented derived artifact.
+The `.distillrepo/` Intermediate Representation (IR) keeps the fuller pooled analysis. The single-file `distilled.<package>.<date>.py` bundle is the review-oriented derived artifact.
 
 ## Compression Notes
 
@@ -314,4 +335,3 @@ There is not yet a universal compression threshold that guarantees trustworthy r
 ## Use of AI
 
 This software was developed with the help of Codex model GPT 5.4.
-
