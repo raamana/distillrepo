@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "distillrepo"
-version = "0.25"
-description = "Distill Python repositories into compact review bundles for LLMs and structured IR for agents."
+version = "0.3"
+description = "Package Python repositories into static-analysis-aware review bundles for LLMs."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.9"

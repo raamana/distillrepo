@@ -1,6 +1,6 @@
 # distillrepo
 
-`distillrepo` uses static analysis to distill Python repositories into compact review bundles for LLMs and a structured Intermediate Representation (IR) for agents.
+`distillrepo` packages Python repositories into static-analysis-aware review bundles for LLMs and a structured Intermediate Representation (IR) for agents.
 
 Common outputs:
 - `distilled.<package>.<MMMDDYYYY>.py`: a single-file bundle for LLM review
@@ -13,9 +13,11 @@ Large repos are awkward to review with an LLM if you only have two bad options:
 - paste a vague summary and lose important detail
 
 `distillrepo` sits in the middle:
-- it preserves real code for the most relevant parts
+- it can package the relevant source into one reviewable file
+- it adds static-analysis context such as imports, inferred roots, call graphs, hotspots, and symbols
 - compresses lower-priority areas into summaries or signatures
 - keeps a structured IR for retrieval, ranking, and follow-up analysis
+- it helps with LLM-assisted review when you do not have an agent-assisted IDE such as Cursor, Windsurf, or a local coding agent wired into the repo
 
 ## Example Demo Outputs
 
@@ -170,7 +172,7 @@ Use the IR when you want deterministic machine-readable structure instead of one
 
 For LLM review:
 - start with `distilled.<package>.<date>.py`
-- use `distillrepo` with no arguments when you want a large current-directory bundle quickly
+- use `distillrepo` with no arguments when you want a static-analysis-aware source package for the current repo
 - use `review` mode first unless you have a specific need
 - if the bundle still feels too large, try `architecture` or `budgeted`
 - if you need nearly raw source, use `concat` or `plain_concat`
@@ -209,7 +211,7 @@ Recommended order:
   Cleaned source concatenation only. No added headers or analysis sections.
 
 - `full`
-  Largest review bundle. Includes the analysis sections plus broad full-source inclusion. Useful for debugging the tool or getting an almost-verbatim review artifact, not for tight context budgets.
+  Largest review bundle. Includes analysis sections plus broad full-source inclusion. Useful when you want to hand an LLM one source-rich file without relying on an agent-assisted IDE. Not for tight context budgets.
 
 ## Common Scenarios
 
@@ -227,7 +229,7 @@ This uses `review` mode, which is the recommended default.
 distillrepo
 ```
 
-This uses `full` mode, writes the bundle into the current working directory, and skips IR output.
+This uses `full` mode, writes the bundle into the current working directory, and skips IR output. It is the quickest path when you want a single static-analysis-aware file for LLM review.
 
 ### Architecture walkthrough
 
@@ -291,8 +293,8 @@ Each run prints a short summary so the user gets immediate value even before ope
 - cycles
 - possible unused symbol count
 - top hotspot
-- original vs distilled estimated tokens
-- saved tokens, retained percentage, and compression ratio
+- original vs bundle estimated tokens
+- compression details, or analysis overhead for source-rich `full` bundles
 - output paths
 
 ## What To Trust
@@ -325,11 +327,11 @@ Heuristics:
 
 The `.distillrepo/` Intermediate Representation (IR) keeps the fuller pooled analysis. The single-file `distilled.<package>.<date>.py` bundle is the review-oriented derived artifact.
 
-## Compression Notes
+## Size Notes
 
-The reported token counts are estimates based on text length. They are useful for comparing runs and spotting extreme compression, but they are not model-specific tokenizer counts.
+The reported token counts are estimates based on text length. They are useful for comparing runs and spotting extreme compression or analysis overhead, but they are not model-specific tokenizer counts.
 
-There is not yet a universal compression threshold that guarantees trustworthy review quality across repos. Treat compression as an observed outcome, not the main objective. The main objective is retaining enough review-relevant structure and source to support a useful LLM review.
+There is not yet a universal compression threshold that guarantees trustworthy review quality across repos. Treat compression as an observed outcome, not the main objective. In `full` mode, the bundle may be larger than the raw source estimate because it adds static-analysis guidance around the source. The main objective is retaining enough review-relevant structure and source to support a useful LLM review.
 
 
 ## Use of AI
