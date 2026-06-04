@@ -159,6 +159,11 @@ def _header_lines(result: AnalysisResult, ordered_files: list[FileInfo]) -> list
         "".join("\n".join(_render_file_body(file_info)) for file_info in ordered_files if file_info.inclusion_mode != "excluded")
     )
     compression = f"{(original_tokens / bundled_tokens):.1f}x" if bundled_tokens else "n/a"
+    size_line = f"# Compression: {compression}"
+    if result.config.review_mode == "full" and bundled_tokens > original_tokens:
+        overhead = bundled_tokens - original_tokens
+        retained_percent = (bundled_tokens / original_tokens * 100.0) if original_tokens else 0.0
+        size_line = f"# Analysis overhead: +{overhead} est tokens ({retained_percent:.1f}% of original size)"
     return [
         "# Distillrepo Review Bundle",
         f"# Package: {result.config.package_name}",
@@ -172,7 +177,7 @@ def _header_lines(result: AnalysisResult, ordered_files: list[FileInfo]) -> list
         f"# Lines / SLOC: {result.total_lines} / {result.total_sloc}",
         f"# Original repo size (est tokens): {original_tokens}",
         f"# Bundle size (est tokens): {bundled_tokens}",
-        f"# Compression: {compression}",
+        size_line,
     ]
 
 

@@ -132,6 +132,8 @@ def main() -> int:
     try:
         project_input = args.package_root.resolve()
         invocation_cwd = Path.cwd().resolve()
+        if not project_input.exists():
+            raise ValueError(f"Path does not exist: {project_input}")
         project_root = _find_project_root(project_input)
         pyproject = _load_pyproject(project_root) if project_root is not None else {}
         raw_project_name = pyproject.get("project", {}).get("name") or project_input.name
@@ -378,6 +380,7 @@ def _print_summary(result, bundle_path: Path, ir_dir: Path | None) -> None:
     original_tokens = result.original_tokens
     bundle_tokens = result.bundle_tokens
     saved_tokens = max(0, original_tokens - bundle_tokens)
+    overhead_tokens = max(0, bundle_tokens - original_tokens)
     saved_percent = (saved_tokens / original_tokens * 100.0) if original_tokens else 0.0
     retained_percent = (bundle_tokens / original_tokens * 100.0) if original_tokens else 0.0
     compression = (original_tokens / bundle_tokens) if bundle_tokens else 0.0
@@ -400,11 +403,14 @@ def _print_summary(result, bundle_path: Path, ir_dir: Path | None) -> None:
         )
     print("")
     print(f"Original size: {original_tokens:,} tokens")
-    print(f"Distilled size: {bundle_tokens:,} tokens")
-    print(f"Saved: {saved_tokens:,} tokens ({saved_percent:.1f}%)")
-    print(f"Retained: {retained_percent:.1f}% of estimated original tokens")
-    if compression:
-        print(f"Compression: {compression:.1f}x")
+    print(f"Bundle size: {bundle_tokens:,} tokens")
+    if result.config.review_mode == "full" and overhead_tokens:
+        print(f"Analysis overhead: +{overhead_tokens:,} tokens ({retained_percent:.1f}% of original size)")
+    else:
+        print(f"Saved: {saved_tokens:,} tokens ({saved_percent:.1f}%)")
+        print(f"Retained: {retained_percent:.1f}% of estimated original tokens")
+        if compression:
+            print(f"Compression: {compression:.1f}x")
     print("")
     print(f"LLM bundle: {bundle_path}")
     print(f"IR: {ir_dir if ir_dir is not None else 'skipped (--no-ir)'}")

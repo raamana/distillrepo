@@ -112,6 +112,7 @@ def write_outputs(config: Config) -> dict[str, object]:
     bundle_text = render_bundle(result)
     date_label = datetime.now().strftime("%b%d%Y")
     bundle_path = config.output_path or (config.package_root / f"distilled.{config.package_name}.{date_label}.py")
+    bundle_path.parent.mkdir(parents=True, exist_ok=True)
     bundle_path.write_text(bundle_text, encoding="utf-8")
     ir_dir = config.package_root / ".distillrepo" if config.write_ir else None
     artifacts = write_ir_bundle(result, bundle_path, ir_dir) if ir_dir is not None else []
