@@ -161,7 +161,25 @@ def clean_source(source: str, header_pattern: str) -> str:
         index += 1
     while index < len(lines) and not lines[index].strip():
         index += 1
-    return "\n".join(lines[index:]).strip() + ("\n" if lines[index:] else "")
+    return normalize_source_whitespace(lines[index:])
+
+
+def normalize_source_whitespace(lines: list[str], max_blank_run: int = 2) -> str:
+    normalized: list[str] = []
+    blank_run = 0
+    for line in lines:
+        stripped_line = line.rstrip()
+        if stripped_line:
+            normalized.append(stripped_line)
+            blank_run = 0
+            continue
+        blank_run += 1
+        if blank_run <= max_blank_run:
+            normalized.append("")
+
+    while normalized and not normalized[-1]:
+        normalized.pop()
+    return "\n".join(normalized) + ("\n" if normalized else "")
 
 
 def count_sloc(source: str) -> int:
