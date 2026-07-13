@@ -44,7 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("package_root", nargs="?", type=Path, help="Path to the package root to analyze.")
     parser.add_argument(
         "--entry-point-module",
-        help="Override the inferred entry module path relative to the package root.",
+        help="Override the inferred entry module path relative to the package root or project root.",
     )
     parser.add_argument(
         "--entry-point-function",
@@ -142,11 +142,18 @@ def main() -> int:
         package_root = _infer_package_root(project_input, project_root, pyproject, script_target)
         package_name = package_root.name
         analysis_kind = "application" if script_target is not None else "library"
-        entry_point_module = args.entry_point_module or _infer_entry_point_module(
-            package_root, package_name, pyproject, script_target, analysis_kind
-        )
+        analysis_root = package_root
+        if args.entry_point_module:
+            analysis_root, entry_point_module = _resolve_entry_point_override(
+                args.entry_point_module, package_root, project_root
+            )
+            analysis_kind = "application"
+        else:
+            entry_point_module = _infer_entry_point_module(
+                package_root, package_name, pyproject, script_target, analysis_kind
+            )
         entry_point_function = args.entry_point_function or _infer_entry_point_function(
-            package_root / entry_point_module, script_target, analysis_kind
+            analysis_root / entry_point_module, script_target, analysis_kind
         )
 
         if args.output:
@@ -158,10 +165,11 @@ def main() -> int:
 
         default_excludes = Config.__dataclass_fields__["exclude_dirs"].default_factory()
         config = Config(
-            package_root=package_root,
+            package_root=analysis_root,
             package_name=package_name,
             entry_point_module=entry_point_module,
             entry_point_function=entry_point_function,
+            module_root=package_root,
             output_path=output_path,
             write_ir=not args.no_ir,
             review_mode=args.review_mode,
@@ -272,6 +280,36 @@ def _infer_entry_point_module(
     if python_files:
         return python_files[0]
     raise ValueError(f"No Python files found under package root: {package_root}")
+
+
+def _resolve_entry_point_override(value: str, package_root: Path, project_root: Path | None) -> tuple[Path, str]:
+    override_path = Path(value)
+    if override_path.is_absolute():
+        for root in [package_root, project_root]:
+            if root is None:
+                continue
+            relative = _relative_to(override_path.resolve(), root.resolve())
+            if relative is not None and override_path.is_file():
+                return root, relative.as_posix()
+        return package_root, value
+
+    package_candidate = package_root / override_path
+    if package_candidate.is_file():
+        return package_root, override_path.as_posix()
+
+    if project_root is not None:
+        project_candidate = project_root / override_path
+        if project_candidate.is_file():
+            return project_root, override_path.as_posix()
+
+    return package_root, value
+
+
+def _relative_to(path: Path, root: Path) -> Path | None:
+    try:
+        return path.relative_to(root)
+    except ValueError:
+        return None
 
 
 def _infer_entry_point_function(entry_module_path: Path, script_target: str | None, analysis_kind: str) -> str | None:

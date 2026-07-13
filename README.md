@@ -273,6 +273,16 @@ distillrepo path/to/package \
 
 Useful when the inferred root or entry surface is not the one you want reviewed.
 
+### Entry point outside the package
+
+```bash
+distillrepo path/to/project \
+  --entry-point-module scripts/run_dashboard.py \
+  --entry-point-function main
+```
+
+Useful for application repos where the runnable script lives beside the importable package, such as a Dash or Plotly dashboard launched from `scripts/run_dashboard.py`.
+
 ### Tighten scope
 
 ```bash

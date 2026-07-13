@@ -48,6 +48,49 @@ class CliTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertTrue(output.is_file())
 
+    def test_project_root_entry_point_outside_package_is_included(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_sample_project(project)
+            scripts = project / "scripts"
+            scripts.mkdir()
+            (scripts / "run_dashboard.py").write_text(
+                "\n".join(
+                    [
+                        "from sample_pkg.worker import work",
+                        "",
+                        "",
+                        "def main() -> None:",
+                        "    work()",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            output = project / "bundle.py"
+
+            result = self._run_cli(
+                [
+                    str(project),
+                    "--entry-point-module",
+                    "scripts/run_dashboard.py",
+                    "--entry-point-function",
+                    "main",
+                    "--review-mode",
+                    "full",
+                    "--no-ir",
+                    "--output",
+                    str(output),
+                ],
+                cwd=project,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            bundle = output.read_text(encoding="utf-8")
+            self.assertIn("# Entry point: scripts/run_dashboard.py:main", bundle)
+            self.assertIn("# FILE: scripts/run_dashboard.py", bundle)
+            self.assertIn("# FILE: src/sample_pkg/worker.py", bundle)
+
     def test_version_reports_source_version(self) -> None:
         result = self._run_cli(["--version"], cwd=REPO_ROOT)
 

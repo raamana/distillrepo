@@ -29,7 +29,7 @@ def _analyze_file(path: Path, config: Config) -> FileInfo:
     source = path.read_text(encoding="utf-8")
     cleaned_source = clean_source(source, config.header_strip_pattern)
     rel = path.resolve().relative_to(config.package_root.resolve())
-    module_path = module_path_for_file(rel, config.package_name)
+    module_path = module_path_for_config(rel, config)
     file_info = FileInfo(
         path=path.resolve(),
         relative_path=rel.as_posix(),
@@ -150,7 +150,29 @@ def module_path_for_file(relative_path: Path, package_name: str) -> str:
         module_parts = parts[:-1]
     else:
         module_parts = parts[:-1] + [relative_path.stem]
-    return ".".join([package_name, *module_parts]).rstrip(".")
+    if package_name:
+        return ".".join([package_name, *module_parts]).rstrip(".")
+    return ".".join(module_parts).rstrip(".")
+
+
+def module_path_for_config(relative_path: Path, config: Config) -> str:
+    module_root = (config.module_root or config.package_root).resolve()
+    analysis_root = config.package_root.resolve()
+    module_root_relative = _relative_to(module_root, analysis_root)
+    if module_root_relative is not None:
+        module_relative = _relative_to(relative_path, module_root_relative)
+        if module_relative is not None:
+            return module_path_for_file(module_relative, config.package_name)
+    return module_path_for_file(relative_path, "")
+
+
+def _relative_to(path: Path, root: Path) -> Path | None:
+    if root == Path("."):
+        return path
+    try:
+        return path.relative_to(root)
+    except ValueError:
+        return None
 
 
 def clean_source(source: str, header_pattern: str) -> str:

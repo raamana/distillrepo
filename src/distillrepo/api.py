@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from .analysis import analyze_files, module_path_for_file
+from .analysis import analyze_files, module_path_for_config
 from .discovery import discover_python_files
 from .enrich import apply_radon_metrics, detect_unused_candidates
 from .graphs import build_import_graph, compute_reachability, detect_cycles, order_modules, render_call_graph, render_import_forest, render_import_tree
@@ -31,7 +31,7 @@ def analyze(config: Config) -> AnalysisResult:
     files = analyze_files(paths, config)
     warnings = apply_radon_metrics(files, config)
     entry_relative = Path(config.entry_point_module)
-    entry_module = module_path_for_file(entry_relative, config.package_name)
+    entry_module = module_path_for_config(entry_relative, config)
     if entry_module not in files:
         raise ValueError(f"Entry module not found: {config.entry_point_module}")
 

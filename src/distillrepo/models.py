@@ -96,6 +96,7 @@ class Config:
     package_name: str
     entry_point_module: str
     entry_point_function: str | None
+    module_root: Path | None = None
     output_path: Path | None = None
     write_ir: bool = True
     review_mode: str = "review"
