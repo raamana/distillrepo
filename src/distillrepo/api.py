@@ -66,7 +66,7 @@ def analyze(config: Config) -> AnalysisResult:
     call_graph_lines = (
         render_call_graph(files, entry_module, config.entry_point_function, config.call_graph_depth)
         if config.entry_point_function
-        else ["- n/a (library mode: no single function entrypoint)"]
+        else ["- n/a (module-level entrypoint; no single function selected)"]
     )
     return AnalysisResult(
         config=config,
@@ -168,6 +168,8 @@ def classify_root_modules(files: dict[str, FileInfo], config: Config, entry_modu
     for module in root_modules:
         if config.entry_point_function and module == entry_module:
             root_kinds[module] = "cli_entrypoint"
+        elif config.analysis_kind == "application" and module == entry_module:
+            root_kinds[module] = "entry_module"
         elif module == package_root_module:
             root_kinds[module] = "package_root"
         elif files[module].relative_path.endswith("__init__.py"):

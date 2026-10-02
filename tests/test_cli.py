@@ -91,6 +91,45 @@ class CliTests(unittest.TestCase):
             self.assertIn("# FILE: scripts/run_dashboard.py", bundle)
             self.assertIn("# FILE: src/sample_pkg/worker.py", bundle)
 
+    def test_explicit_entry_module_can_be_module_level_without_function(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_sample_project(project)
+            scripts = project / "src" / "sample_pkg" / "scripts"
+            scripts.mkdir()
+            (scripts / "run-dashboard.py").write_text(
+                "\n".join(
+                    [
+                        "from sample_pkg.worker import work",
+                        "",
+                        "DASHBOARD_RESULT = work()",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            output = project / "bundle.py"
+
+            result = self._run_cli(
+                [
+                    str(project / "src" / "sample_pkg"),
+                    "--entry-point-module",
+                    "scripts/run-dashboard.py",
+                    "--review-mode",
+                    "full",
+                    "--no-ir",
+                    "--output",
+                    str(output),
+                ],
+                cwd=project,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            bundle = output.read_text(encoding="utf-8")
+            self.assertIn("# Entry point: scripts/run-dashboard.py", bundle)
+            self.assertIn("# Call Graph\n- n/a (module-level entrypoint; no single function selected)", bundle)
+            self.assertIn("# FILE: scripts/run-dashboard.py", bundle)
+
     def test_version_reports_source_version(self) -> None:
         result = self._run_cli(["--version"], cwd=REPO_ROOT)
 

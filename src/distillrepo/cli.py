@@ -148,13 +148,14 @@ def main() -> int:
                 args.entry_point_module, package_root, project_root
             )
             analysis_kind = "application"
+            entry_point_function = args.entry_point_function
         else:
             entry_point_module = _infer_entry_point_module(
                 package_root, package_name, pyproject, script_target, analysis_kind
             )
-        entry_point_function = args.entry_point_function or _infer_entry_point_function(
-            analysis_root / entry_point_module, script_target, analysis_kind
-        )
+            entry_point_function = args.entry_point_function or _infer_entry_point_function(
+                analysis_root / entry_point_module, script_target, analysis_kind
+            )
 
         if args.output:
             output_path = args.output.resolve()
