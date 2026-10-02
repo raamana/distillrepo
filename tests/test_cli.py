@@ -134,7 +134,7 @@ class CliTests(unittest.TestCase):
         result = self._run_cli(["--version"], cwd=REPO_ROOT)
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "distillrepo 0.4")
+        self.assertEqual(result.stdout.strip(), "distillrepo 0.4.5")
 
     def _run_cli(self, args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
