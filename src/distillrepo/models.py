@@ -91,6 +91,15 @@ class FileInfo:
 
 
 @dataclass(slots=True)
+class SupplementalFile:
+    path: Path
+    relative_path: str
+    text: str
+    size_bytes: int
+    estimated_tokens: int
+
+
+@dataclass(slots=True)
 class Config:
     package_root: Path
     package_name: str
@@ -121,6 +130,8 @@ class Config:
     exclude_globs: list[str] = field(default_factory=list)
     exclude_regexes: list[str] = field(default_factory=list)
     include_tests: bool = False
+    include_git_tracked: bool = False
+    include_paths: list[Path] = field(default_factory=list)
     max_tokens: int | None = None
     max_chars: int | None = None
     max_lines: int | None = None
@@ -153,3 +164,6 @@ class AnalysisResult:
     original_tokens: int = 0
     bundle_tokens: int = 0
     unused_candidates: list[UnusedCandidate] = field(default_factory=list)
+    source_selection: str = "python discovery"
+    supplemental_files: list[SupplementalFile] = field(default_factory=list)
+    supplemental_skipped: list[str] = field(default_factory=list)

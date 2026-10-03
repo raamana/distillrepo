@@ -4,6 +4,7 @@
 
 Common outputs:
 - `distilled.<package>.<MMMDDYYYY>.py`: a single-file bundle for LLM review
+- `distilled.<package>.<MMMDDYYYY>.txt`: the default single-file bundle extension for `--git` and `--include-path` runs
 - `<package_root>/.distillrepo/`: a structured Intermediate Representation (IR) for agents and downstream tooling when IR output is enabled
 
 ## Why use distillrepo
@@ -18,6 +19,14 @@ Large repos are awkward to review with an LLM if you only have two bad options:
 - compresses lower-priority areas into summaries or signatures
 - keeps a structured IR for retrieval, ranking, and follow-up analysis
 - it helps with LLM-assisted review when you do not have an agent-assisted IDE such as Cursor, Windsurf, or a local coding agent wired into the repo
+
+## Latest Features
+
+- No-argument runs now analyze the current working directory in `full` mode and skip IR output, which is useful for quickly preparing one source-rich bundle for LLM review.
+- `--no-ir` skips writing `.distillrepo/` when you only want the single-file bundle.
+- `--git` uses Git-tracked files as the input set, then runs static analysis on tracked Python files and bundles tracked non-Python text as supplemental context.
+- `--include-path app templates scripts` lets you choose specific files or folders before static analysis runs.
+- Module-level entrypoints are supported, so web apps and scripts without a `main()` function can still be analyzed from the module you point at.
 
 ## Example Demo Outputs
 
@@ -123,6 +132,22 @@ Skip IR output explicitly:
 distillrepo path/to/package --no-ir
 ```
 
+Bundle every Git-tracked text file under the current repository:
+
+```bash
+distillrepo . --git
+```
+
+This uses Git to finalize the input set first, runs static analysis on the tracked Python files, and includes tracked non-Python text files as supplemental review context.
+
+Bundle all text files under selected files or folders:
+
+```bash
+distillrepo . --include-path app templates scripts
+```
+
+This uses your selected files and folders as the input set, runs static analysis on selected Python files, and bundles non-Python code/config/resource files as supplemental context.
+
 Show help:
 
 ```bash
@@ -153,6 +178,12 @@ Default output name:
 distilled.<package>.<MMMDDYYYY>.py
 ```
 
+For `--git` and `--include-path`, the default bundle extension is `.txt` because the output can include non-Python supplemental files:
+
+```text
+distilled.<package>.<MMMDDYYYY>.txt
+```
+
 ### 2. IR Directory
 
 The `.distillrepo/` directory is the structured output for agents and tooling. It includes artifacts such as:
@@ -173,6 +204,8 @@ Use the IR when you want deterministic machine-readable structure instead of one
 For LLM review:
 - start with `distilled.<package>.<date>.py`
 - use `distillrepo` with no arguments when you want a static-analysis-aware source package for the current repo
+- use `distillrepo . --git` when you want every Git-tracked text file in the selected tree considered for review
+- use `--include-path` when discovery should be constrained to specific folders
 - use `review` mode first unless you have a specific need
 - if the bundle still feels too large, try `architecture` or `budgeted`
 - if you need nearly raw source, use `concat` or `plain_concat`
@@ -230,6 +263,22 @@ distillrepo
 ```
 
 This uses `full` mode, writes the bundle into the current working directory, and skips IR output. It is the quickest path when you want a single static-analysis-aware file for LLM review.
+
+### Bundle the current Git branch
+
+```bash
+distillrepo . --git
+```
+
+This treats Git-tracked files as the source of truth for discovery. Tracked Python files still go through static analysis; tracked non-Python text files, including Markdown and project metadata, are included as supplemental context. Binary or non-UTF-8 files cannot be embedded, and explicit exclusion flags still apply.
+
+### Bundle specific folders
+
+```bash
+distillrepo . --include-path app templates scripts
+```
+
+This uses the selected files or directories instead of Python module discovery, then runs static analysis on the selected Python files. Non-Python code, config, and declared resource files are bundled as supplemental context while obvious compiled/cache/binary files are skipped.
 
 ### Architecture walkthrough
 
@@ -298,6 +347,8 @@ Useful when the repo has too much non-essential code for the task at hand.
 Each run prints a short summary so the user gets immediate value even before opening the outputs:
 - files, symbols, and modules analyzed
 - analysis kind
+- source selection mode
+- supplemental file counts when applicable
 - roots analyzed
 - reached vs not reached
 - cycles
@@ -336,6 +387,16 @@ Heuristics:
 - shared-across-roots modules are ranked higher for review
 
 The `.distillrepo/` Intermediate Representation (IR) keeps the fuller pooled analysis. The single-file `distilled.<package>.<date>.py` bundle is the review-oriented derived artifact.
+
+## Source Selection Pipeline
+
+Every run follows the same core order:
+- discover or select files
+- finalize the Python files that should be statically analyzed
+- run static analysis over that Python set
+- render the review bundle with analysis sections, selected source, and any supplemental text context
+
+Default discovery walks Python files under the inferred package or project root. `--git` replaces that discovery step with `git ls-files` under the selected root, so tracked files are the source of truth. `--include-path` replaces discovery with the files under the folders you name, while still skipping obvious compiled/cache/binary files and honoring explicit exclusions.
 
 ## Size Notes
 

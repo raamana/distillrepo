@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 from .analysis import estimate_tokens
-from .models import AnalysisResult, FileInfo, FunctionInfo
+from .models import AnalysisResult, FileInfo, FunctionInfo, SupplementalFile
 
 
 def render_bundle(result: AnalysisResult) -> str:
     if result.config.review_mode == "concat":
         rendered = _render_concat_bundle(result)
-        result.original_tokens = sum(file_info.estimated_tokens for file_info in result.files.values())
+        result.original_tokens = _original_tokens(result)
         result.bundle_tokens = estimate_tokens(rendered)
         return rendered
     if result.config.review_mode == "plain_concat":
         rendered = _render_plain_concat_bundle(result)
-        result.original_tokens = sum(file_info.estimated_tokens for file_info in result.files.values())
+        result.original_tokens = _original_tokens(result)
         result.bundle_tokens = estimate_tokens(rendered)
         return rendered
     ordered_files = _apply_budgets(result)
@@ -43,6 +43,13 @@ def render_bundle(result: AnalysisResult) -> str:
         lines.append("# Warnings")
         for warning in result.warnings:
             lines.append(f"- {warning}")
+    if result.supplemental_skipped:
+        lines.append("")
+        lines.append("# Skipped Supplemental Files")
+        for item in result.supplemental_skipped[:100]:
+            lines.append(f"- {item}")
+        if len(result.supplemental_skipped) > 100:
+            lines.append(f"- ... {len(result.supplemental_skipped) - 100} more")
     lines.append("")
     lines.append("# Source Material")
     for file_info in ordered_files:
@@ -50,8 +57,14 @@ def render_bundle(result: AnalysisResult) -> str:
             continue
         lines.extend(_file_block(file_info))
         lines.append("")
+    if result.supplemental_files:
+        lines.append("# Supplemental Files")
+        lines.append("# Non-Python text selected before analysis and bundled for review context.")
+        for file_info in result.supplemental_files:
+            lines.extend(_supplemental_file_block(file_info))
+            lines.append("")
     rendered = "\n".join(lines).rstrip() + "\n"
-    result.original_tokens = sum(file_info.estimated_tokens for file_info in result.files.values())
+    result.original_tokens = _original_tokens(result)
     result.bundle_tokens = estimate_tokens(rendered)
     return rendered
 
@@ -62,7 +75,7 @@ def _render_concat_bundle(result: AnalysisResult) -> str:
         "# Distillrepo Concat Bundle",
         f"# Package: {result.config.package_name}",
         "# Mode: concat",
-        "# Contents: cleaned source files concatenated after discovery/exclusion rules.",
+        "# Contents: cleaned source files concatenated after discovery/exclusion rules and static analysis.",
         "# Notes: lightweight file headers are added; leading generated headers are stripped; blank lines are removed.",
         "",
     ]
@@ -71,6 +84,14 @@ def _render_concat_bundle(result: AnalysisResult) -> str:
         if file_info.inclusion_mode == "excluded":
             continue
         compact_source = _concat_source(file_info.cleaned_source)
+        if not compact_source:
+            continue
+        included += 1
+        lines.append(f"# FILE: {file_info.relative_path}")
+        lines.extend(compact_source)
+        lines.append("")
+    for file_info in result.supplemental_files:
+        compact_source = _concat_source(file_info.text)
         if not compact_source:
             continue
         included += 1
@@ -89,6 +110,10 @@ def _render_plain_concat_bundle(result: AnalysisResult) -> str:
         if file_info.inclusion_mode == "excluded":
             continue
         compact_source = "\n".join(_concat_source(file_info.cleaned_source)).strip()
+        if compact_source:
+            chunks.append(compact_source)
+    for file_info in result.supplemental_files:
+        compact_source = "\n".join(_concat_source(file_info.text)).strip()
         if compact_source:
             chunks.append(compact_source)
     if not chunks:
@@ -154,9 +179,10 @@ def _exceeds(
 
 
 def _header_lines(result: AnalysisResult, ordered_files: list[FileInfo]) -> list[str]:
-    original_tokens = sum(file_info.estimated_tokens for file_info in result.files.values())
+    original_tokens = _original_tokens(result)
     bundled_tokens = estimate_tokens(
         "".join("\n".join(_render_file_body(file_info)) for file_info in ordered_files if file_info.inclusion_mode != "excluded")
+        + "".join(file_info.text for file_info in result.supplemental_files)
     )
     compression = f"{(original_tokens / bundled_tokens):.1f}x" if bundled_tokens else "n/a"
     size_line = f"# Compression: {compression}"
@@ -172,7 +198,10 @@ def _header_lines(result: AnalysisResult, ordered_files: list[FileInfo]) -> list
         f"# Root summary: {_root_coverage_text(result)}",
         f"# Entry point: {_entrypoint_label(result)}",
         f"# Review mode: {result.config.review_mode}",
+        f"# Source selection: {result.source_selection}",
         f"# Files analyzed: {len(result.files)}",
+        f"# Supplemental files bundled: {len(result.supplemental_files)}",
+        f"# Supplemental files skipped: {len(result.supplemental_skipped)}",
         f"# Reached from root set / not reached: {result.reachable_count} / {result.unreachable_count}",
         f"# Lines / SLOC: {result.total_lines} / {result.total_sloc}",
         f"# Original repo size (est tokens): {original_tokens}",
@@ -265,6 +294,18 @@ def _file_block(file_info: FileInfo) -> list[str]:
     return header + [""] + body
 
 
+def _supplemental_file_block(file_info: SupplementalFile) -> list[str]:
+    language = _fence_language(file_info.relative_path)
+    return [
+        f"# FILE: {file_info.relative_path}",
+        f"# BYTES: {file_info.size_bytes}",
+        "",
+        f"```{language}",
+        file_info.text.rstrip(),
+        "```",
+    ]
+
+
 def _render_file_body(file_info: FileInfo) -> list[str]:
     if file_info.inclusion_mode == "full":
         return file_info.cleaned_source.splitlines() or [""]
@@ -352,3 +393,25 @@ def _short_doc(docstring: str, limit: int = 120, max_lines: int = 1) -> str:
 
 def _concat_source(source: str) -> list[str]:
     return [line.rstrip() for line in source.splitlines() if line.strip()]
+
+
+def _original_tokens(result: AnalysisResult) -> int:
+    python_tokens = sum(file_info.estimated_tokens for file_info in result.files.values())
+    supplemental_tokens = sum(file_info.estimated_tokens for file_info in result.supplemental_files)
+    return python_tokens + supplemental_tokens
+
+
+def _fence_language(relative_path: str) -> str:
+    suffix = relative_path.rsplit(".", 1)[-1].lower() if "." in relative_path else ""
+    return {
+        "cfg": "ini",
+        "js": "javascript",
+        "md": "markdown",
+        "py": "python",
+        "rst": "rst",
+        "sh": "bash",
+        "toml": "toml",
+        "ts": "typescript",
+        "yaml": "yaml",
+        "yml": "yaml",
+    }.get(suffix, suffix)

@@ -89,6 +89,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--exclude-regex", action="append", default=[], help="Regex pattern to exclude.")
     parser.add_argument("--include-tests", action="store_true", help="Include tests in discovery.")
     parser.add_argument(
+        "--git",
+        action="store_true",
+        help="Use Git-tracked files under the selected root as the input set before static analysis.",
+    )
+    parser.add_argument(
+        "--include-path",
+        nargs="+",
+        type=Path,
+        default=[],
+        metavar="PATH",
+        help="Use files under one or more files/directories as the input set before static analysis.",
+    )
+    parser.add_argument(
         "--no-jedi",
         action="store_true",
         help="Disable Jedi-based call resolution enrichment.",
@@ -139,22 +152,31 @@ def main() -> int:
         raw_project_name = pyproject.get("project", {}).get("name") or project_input.name
         normalized_project_name = str(raw_project_name).replace("-", "_")
         script_target = _infer_script_target(pyproject, normalized_project_name)
+        pack_mode = args.git or args.include_path
+        default_excludes = Config.__dataclass_fields__["exclude_dirs"].default_factory()
+
         package_root = _infer_package_root(project_input, project_root, pyproject, script_target)
         package_name = package_root.name
         analysis_kind = "application" if script_target is not None else "library"
-        analysis_root = package_root
+        analysis_root = project_input if pack_mode else package_root
         if args.entry_point_module:
-            analysis_root, entry_point_module = _resolve_entry_point_override(
+            override_root, override_module = _resolve_entry_point_override(
                 args.entry_point_module, package_root, project_root
             )
+            if not pack_mode:
+                analysis_root = override_root
+            entry_module_path = override_root / override_module
+            entry_point_module = _relative_module_path(entry_module_path, analysis_root, override_module)
             analysis_kind = "application"
             entry_point_function = args.entry_point_function
         else:
-            entry_point_module = _infer_entry_point_module(
+            package_entry_module = _infer_entry_point_module(
                 package_root, package_name, pyproject, script_target, analysis_kind
             )
+            entry_module_path = package_root / package_entry_module
+            entry_point_module = _relative_module_path(entry_module_path, analysis_root, package_entry_module)
             entry_point_function = args.entry_point_function or _infer_entry_point_function(
-                analysis_root / entry_point_module, script_target, analysis_kind
+                entry_module_path, script_target, analysis_kind
             )
 
         if args.output:
@@ -164,7 +186,6 @@ def main() -> int:
         else:
             output_path = None
 
-        default_excludes = Config.__dataclass_fields__["exclude_dirs"].default_factory()
         config = Config(
             package_root=analysis_root,
             package_name=package_name,
@@ -183,6 +204,8 @@ def main() -> int:
             exclude_globs=list(args.exclude_glob),
             exclude_regexes=list(args.exclude_regex),
             include_tests=args.include_tests,
+            include_git_tracked=args.git,
+            include_paths=list(args.include_path),
             max_tokens=args.max_tokens,
             max_chars=args.max_chars,
             max_lines=args.max_lines,
@@ -190,14 +213,15 @@ def main() -> int:
             include_unreachable=(
                 False if args.exclude_unreachable else args.review_mode in {"full", "concat", "plain_concat"}
             ),
+            output_format="txt" if pack_mode else "py",
             analysis_kind=analysis_kind,
         )
         outputs = write_outputs(config)
     except ValueError as exc:
         parser.exit(2, f"distillrepo: error: {exc}\n")
 
-    result = outputs["result"]
     bundle_path = outputs["bundle_path"]
+    result = outputs["result"]
     ir_dir = outputs["ir_dir"]
     _print_summary(result, bundle_path, ir_dir)
     if args.stdout:
@@ -304,6 +328,13 @@ def _resolve_entry_point_override(value: str, package_root: Path, project_root: 
             return project_root, override_path.as_posix()
 
     return package_root, value
+
+
+def _relative_module_path(entry_module_path: Path, analysis_root: Path, fallback: str) -> str:
+    relative = _relative_to(entry_module_path.resolve(), analysis_root.resolve())
+    if relative is not None:
+        return relative.as_posix()
+    return fallback
 
 
 def _relative_to(path: Path, root: Path) -> Path | None:
@@ -429,6 +460,9 @@ def _print_summary(result, bundle_path: Path, ir_dir: Path | None) -> None:
         f"{len(result.files)} modules"
     )
     print(f"Analysis kind: {result.config.analysis_kind}")
+    print(f"Source selection: {result.source_selection}")
+    if result.supplemental_files or result.supplemental_skipped:
+        print(f"Supplemental files: {len(result.supplemental_files)} bundled, {len(result.supplemental_skipped)} skipped")
     print(f"Roots analyzed: {len(result.root_modules)}")
     print(f"Reached from roots: {result.reachable_count}, not reached: {result.unreachable_count}")
     print(f"Cycles: {len(result.cycles)}")

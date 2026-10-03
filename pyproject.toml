@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "distillrepo"
-version = "0.4.5"
+version = "0.5.0"
 description = "Package Python repositories into static-analysis-aware review bundles for LLMs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -51,11 +51,15 @@ packages = ["src/distillrepo"]
 exclude = [
   "/src/distillrepo/.distillrepo",
   "/src/distillrepo/distilled.*.py",
+  "/src/distillrepo/distilled.*.txt",
 ]
 
 [tool.hatch.build.targets.sdist]
 exclude = [
+  "/distilled.*.py",
+  "/distilled.*.txt",
   "/idea goals and purpose.md",
   "/src/distillrepo/.distillrepo",
   "/src/distillrepo/distilled.*.py",
+  "/src/distillrepo/distilled.*.txt",
 ]

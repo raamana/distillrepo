@@ -9,6 +9,7 @@ from .enrich import apply_radon_metrics, detect_unused_candidates
 from .graphs import build_import_graph, compute_reachability, detect_cycles, order_modules, render_call_graph, render_import_forest, render_import_tree
 from .ir import write_ir_bundle
 from .models import AnalysisResult, Config, FileInfo
+from .pack import discover_selected_files
 from .ranking import assign_inclusion_modes, collect_hotspots, generate_observations, score_files
 from .render import render_bundle
 from .resolution import resolve_calls
@@ -27,7 +28,19 @@ def analyze(config: Config) -> AnalysisResult:
     scores, importance ranking, unused-code candidates, and source inclusion
     choices for the derived review bundle.
     """
-    paths = discover_python_files(config)
+    supplemental_files = []
+    supplemental_skipped = []
+    source_selection = "python discovery"
+    if config.include_git_tracked or config.include_paths:
+        selected = discover_selected_files(config)
+        paths = selected.python_paths
+        supplemental_files = selected.supplemental_files
+        supplemental_skipped = selected.skipped
+        source_selection = selected.selection
+    else:
+        paths = discover_python_files(config)
+    if not paths:
+        raise ValueError("No Python files selected for static analysis.")
     files = analyze_files(paths, config)
     warnings = apply_radon_metrics(files, config)
     entry_relative = Path(config.entry_point_module)
@@ -87,6 +100,9 @@ def analyze(config: Config) -> AnalysisResult:
         unreachable_count=unreachable_count,
         warnings=warnings,
         unused_candidates=unused_candidates,
+        source_selection=source_selection,
+        supplemental_files=supplemental_files,
+        supplemental_skipped=supplemental_skipped,
     )
 
 
@@ -111,7 +127,7 @@ def write_outputs(config: Config) -> dict[str, object]:
     result = analyze(config)
     bundle_text = render_bundle(result)
     date_label = datetime.now().strftime("%b%d%Y")
-    bundle_path = config.output_path or (config.package_root / f"distilled.{config.package_name}.{date_label}.py")
+    bundle_path = config.output_path or (config.package_root / f"distilled.{config.package_name}.{date_label}.{config.output_format}")
     bundle_path.parent.mkdir(parents=True, exist_ok=True)
     bundle_path.write_text(bundle_text, encoding="utf-8")
     ir_dir = config.package_root / ".distillrepo" if config.write_ir else None
