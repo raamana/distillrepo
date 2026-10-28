@@ -39,18 +39,28 @@ def analyze(config: Config) -> AnalysisResult:
         source_selection = selected.selection
     else:
         paths = discover_python_files(config)
-    if not paths:
+    selected_mode = bool(config.include_git_tracked or config.include_paths)
+    if not paths and not selected_mode:
         raise ValueError("No Python files selected for static analysis.")
+    if selected_mode and not paths and not supplemental_files:
+        raise ValueError("No supported files selected for bundling.")
     files = analyze_files(paths, config)
     warnings = apply_radon_metrics(files, config)
-    entry_relative = Path(config.entry_point_module)
-    entry_module = module_path_for_config(entry_relative, config)
-    if entry_module not in files:
+    entry_module = module_path_for_config(Path(config.entry_point_module), config) if config.entry_point_module else ""
+    if (config.entry_point_module or not selected_mode) and entry_module not in files:
         raise ValueError(f"Entry module not found: {config.entry_point_module}")
 
-    root_modules = derive_root_modules(files, config, entry_module)
-    root_kinds = classify_root_modules(files, config, entry_module, root_modules)
+    if selected_mode and not entry_module:
+        root_modules = sorted(files)
+        root_kinds = {module: "selected_file" for module in root_modules}
+    else:
+        root_modules = derive_root_modules(files, config, entry_module)
+        root_kinds = classify_root_modules(files, config, entry_module, root_modules)
+    if not files:
+        warnings.append("No Python files selected; supplemental text is bundled without Python static analysis.")
     if config.entry_point_function:
+        if not entry_module:
+            raise ValueError("An entry module is required when specifying an entry function.")
         entry_file = files[entry_module]
         if not any(
             function.qualified_name == config.entry_point_function or function.name == config.entry_point_function
@@ -73,7 +83,7 @@ def analyze(config: Config) -> AnalysisResult:
     warnings.extend(vulture_warnings)
     import_tree_lines = (
         render_import_tree(import_graph, files, entry_module)
-        if config.analysis_kind == "application"
+        if config.analysis_kind == "application" and entry_module
         else render_import_forest(import_graph, files, root_modules)
     )
     call_graph_lines = (
@@ -81,6 +91,8 @@ def analyze(config: Config) -> AnalysisResult:
         if config.entry_point_function
         else ["- n/a (module-level entrypoint; no single function selected)"]
     )
+    if selected_mode and not entry_module:
+        call_graph_lines = ["- n/a (selected-file analysis; no entry function requested; resolved calls are recorded in the IR)"]
     return AnalysisResult(
         config=config,
         files=files,

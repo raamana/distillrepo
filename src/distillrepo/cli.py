@@ -59,10 +59,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--review-mode",
-        default="review",
+        default=None,
         choices=["review", "architecture", "hotspots", "entrypath", "budgeted", "concat", "plain_concat", "full"],
         help=(
             "LLM bundle strategy. "
+            "Defaults to full for --git/--include-path and no-argument runs, otherwise review. "
             "review=recommended balanced mix of analysis, selected full source, summaries, and signatures; "
             "architecture=compact structure-first map with lighter source detail; "
             "hotspots=prioritize complex or risky areas; "
@@ -134,6 +135,12 @@ def main() -> int:
     parser = build_parser()
     no_arg_invocation = len(sys.argv) == 1
     args = parser.parse_args()
+    if args.review_mode is None:
+        args.review_mode = "full" if no_arg_invocation or args.git or args.include_path else "review"
+    if args.git and args.include_path:
+        parser.error("Choose either --git or --include-path.")
+    if (args.git or args.include_path) and args.entry_point_function and not args.entry_point_module:
+        parser.error("--entry-point-function requires --entry-point-module with file selection.")
 
     if args.package_root is None:
         args.package_root = Path(".")
@@ -169,6 +176,10 @@ def main() -> int:
             entry_point_module = _relative_module_path(entry_module_path, analysis_root, override_module)
             analysis_kind = "application"
             entry_point_function = args.entry_point_function
+        elif pack_mode:
+            entry_point_module = ""
+            entry_point_function = None
+            analysis_kind = "selected_files"
         else:
             package_entry_module = _infer_entry_point_module(
                 package_root, package_name, pyproject, script_target, analysis_kind

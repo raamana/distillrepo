@@ -22,6 +22,10 @@ Large repos are awkward to review with an LLM if you only have two bad options:
 
 ## Latest Features
 
+Version `0.55` fixes entrypoint errors with `--include-path` and `--git`. These selectors require no entry module or `main()` function. They default to `full`: analyze every selected Python file and concatenate the full source with analysis context. Independent files are retained even when no selected module imports them. Use `--review-mode` explicitly if you want compression.
+
+An explicit `--entry-point-module` remains optional and is validated against the selected files. `--entry-point-function` requires that module when using file selection. Config/template-only selections also work; the bundle reports that no Python static analysis was possible. Git and explicit path selection cannot be combined.
+
 - No-argument runs now analyze the current working directory in `full` mode and skip IR output, which is useful for quickly preparing one source-rich bundle for LLM review.
 - `--no-ir` skips writing `.distillrepo/` when you only want the single-file bundle.
 - `--git` uses Git-tracked files as the input set, then runs static analysis on tracked Python files and bundles tracked non-Python text as supplemental context.
@@ -122,7 +126,7 @@ Analyze a package or project path explicitly:
 distillrepo path/to/package
 ```
 
-Explicit path-based runs default to `review` mode and write:
+Explicit package/project path runs without `--git` or `--include-path` default to `review` mode and write:
 - `path/to/package/distilled.<package>.<MMMDDYYYY>.py`
 - `path/to/package/.distillrepo/`
 
@@ -147,6 +151,12 @@ distillrepo . --include-path app templates scripts
 ```
 
 This uses your selected files and folders as the input set, runs static analysis on selected Python files, and bundles non-Python code/config/resource files as supplemental context.
+
+No entrypoint is needed. Paths are relative to the positional project root (the current directory when omitted). Use `--no-ir` to write only the bundle:
+
+```bash
+distillrepo --include-path app templates scripts --no-ir
+```
 
 Show help:
 

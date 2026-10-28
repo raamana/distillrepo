@@ -211,6 +211,8 @@ def _header_lines(result: AnalysisResult, ordered_files: list[FileInfo]) -> list
 
 
 def _entrypoint_label(result: AnalysisResult) -> str:
+    if not result.config.entry_point_module:
+        return "n/a (selected files; no entrypoint required)"
     if result.config.entry_point_function:
         return f"{result.config.entry_point_module}:{result.config.entry_point_function}"
     if result.config.analysis_kind == "application":

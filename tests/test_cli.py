@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,79 @@ SRC_ROOT = REPO_ROOT / "src"
 
 
 class CliTests(unittest.TestCase):
+    def test_include_path_analyzes_imports_and_calls_without_main(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_sample_project(project)
+            package = project / "src" / "sample_pkg"
+            (package / "dashboard.py").write_text(
+                "from .worker import work\n\ndef callback():\n    return work()\n"
+            )
+            output = project / "bundle.txt"
+            result = self._run_cli([
+                "--include-path", "src/sample_pkg/dashboard.py", "src/sample_pkg/worker.py",
+                "--output", str(output)
+            ], cwd=project)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            bundle = output.read_text()
+            self.assertIn("return work()", bundle)
+            self.assertIn('return "done"', bundle)
+            relationships = (project / ".distillrepo" / "relationships.json").read_text()
+            self.assertIn("sample_pkg.dashboard", relationships)
+            self.assertIn("sample_pkg.worker", relationships)
+            self.assertIn("callback", relationships)
+
+    def test_selected_files_do_not_require_project_entrypoint(self) -> None:
+        for selector in ("paths", "git"):
+            with self.subTest(selector=selector), tempfile.TemporaryDirectory() as tmp:
+                project = Path(tmp)
+                self._write_sample_project(project)
+                chosen = project / "chosen"
+                chosen.mkdir()
+                for index in range(12):
+                    (chosen / f"part{index}.py").write_text(
+                        f"def work{index}():\n    return 'body-{index}'\n", encoding="utf-8"
+                    )
+                if selector == "git":
+                    subprocess.run(["git", "init"], cwd=project, check=True, capture_output=True)
+                    subprocess.run(["git", "add", "chosen"], cwd=project, check=True)
+                    flags = ["--git"]
+                else:
+                    flags = ["--include-path", "chosen"]
+                output = project / "bundle.txt"
+                result = self._run_cli([*flags, "--output", str(output)], cwd=project)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                bundle = output.read_text()
+                self.assertIn("# Review mode: full", bundle)
+                self.assertIn("# Files analyzed: 12", bundle)
+                self.assertIn("# Complexity Hotspots", bundle)
+                for index in range(12):
+                    self.assertIn(f"return 'body-{index}'", bundle)
+                self.assertNotIn("# FILE: src/sample_pkg/cli.py", bundle)
+                symbols = json.loads((project / ".distillrepo" / "symbols.json").read_text())
+                self.assertIn("work11", json.dumps(symbols))
+
+    def test_include_path_allows_non_python_only_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.yaml").write_text("runtime: python311\n")
+            output = project / "bundle.txt"
+            result = self._run_cli(["--include-path", "app.yaml", "--output", str(output)], cwd=project)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("# Files analyzed: 0", output.read_text())
+            self.assertIn("runtime: python311", output.read_text())
+
+    def test_selected_explicit_invalid_entrypoint_still_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_sample_project(project)
+            result = self._run_cli([
+                "--include-path", "src/sample_pkg/worker.py", "--entry-point-module", "missing.py"
+            ], cwd=project)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Entry module not found", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
     def test_no_args_writes_full_bundle_to_current_directory_without_ir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
@@ -208,7 +282,7 @@ class CliTests(unittest.TestCase):
         result = self._run_cli(["--version"], cwd=REPO_ROOT)
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "distillrepo 0.5.0")
+        self.assertEqual(result.stdout.strip(), "distillrepo 0.55")
 
     def _run_cli(self, args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
